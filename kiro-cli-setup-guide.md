@@ -16,6 +16,7 @@
 7. [Tips Pro](#7-tips-pro)
 8. [Quick Reference Card](#8-quick-reference-card)
 9. [Referensi](#9-referensi)
+10. [KIRO_HOME — Isolasi State Per-Project](#10-kiro_home--isolasi-state-per-project)
 
 ---
 
@@ -681,3 +682,98 @@ Kiro meringkas history tapi mempertahankan informasi kunci.
 | Tool Permissions | https://kiro.dev/docs/cli/chat/permissions/ |
 | Headless Mode (CI/CD) | https://kiro.dev/blog/introducing-headless-mode/ |
 | CLI Changelog | https://kiro.dev/changelog/cli/ |
+
+
+
+---
+
+## 10. KIRO_HOME — Isolasi State Per-Project
+
+### Perintah
+
+    export KIRO_HOME="$(pwd)/.kiro_env"
+    kiro-cli chat --agent core-portfolio
+
+### Apa Yang Dilakukan?
+
+**Baris 1: `export KIRO_HOME="$(pwd)/.kiro_env"`**
+
+Mengatur environment variable KIRO_HOME agar menunjuk ke folder .kiro_env di direktori project saat ini (bukan default ~/.kiro). Semua state Kiro — agents, sessions, settings, steering global — akan disimpan di folder tersebut.
+
+**Baris 2: `kiro-cli chat --agent core-portfolio`**
+
+Memulai chat session menggunakan custom agent bernama core-portfolio yang konfigurasinya berada di .kiro_env/agents/core-portfolio.json.
+
+### Struktur Yang Dihasilkan
+
+    .kiro_env/
+    ├── .cli_bash_history              ← Riwayat command bash yang dijalankan Kiro
+    ├── agents/
+    │   └── core-portfolio.json        ← Konfigurasi custom agent Anda
+    ├── sessions/
+    │   └── cli/
+    │       ├── <session-id>.json      ← Metadata session
+    │       ├── <session-id>.jsonl     ← Log percakapan (pesan per baris)
+    │       └── <session-id>.lock      ← Lock file (mencegah session ganda)
+    └── settings/
+        ├── cli.json                   ← Settings Kiro CLI (trusted tools, dsb.)
+        └── feed_state.json            ← State internal (changelog feed, dsb.)
+
+### Kenapa Ini Berguna?
+
+| Aspek | Default (~/.kiro) | Dengan KIRO_HOME per-project |
+|-------|-------------------|------------------------------|
+| Agent configs | Dicampur semua project | Terisolasi per project |
+| Sessions | Satu tempat untuk semua | Terpisah per project |
+| Settings | Satu global | Bisa beda per project |
+| Portabilitas | Tidak ikut saat clone repo | Bisa di-commit ke repo (jika mau) |
+| Multi-profile | Tidak bisa | Bisa — tiap project punya profil Kiro sendiri |
+
+### Kapan Teknik Ini Dipakai?
+
+1. **Project berbeda butuh agent berbeda** — misalnya project A pakai agent core-portfolio, project B pakai agent devops-deployer
+2. **Isolasi penuh** — tidak ingin session/history satu project bocor ke project lain
+3. **Tim kolaborasi** — bisa commit .kiro_env/agents/ ke repo agar semua anggota tim pakai agent yang sama
+4. **Containerized environments** — saat jalan di Docker/CI, state tidak bergantung pada home directory
+5. **Multi-profile di satu mesin** — misahkan profil kerja dan pribadi
+
+### Perbandingan: KIRO_HOME vs .kiro/ di Workspace
+
+| Aspek | KIRO_HOME (.kiro_env/) | .kiro/ workspace |
+|-------|------------------------|------------------|
+| Lingkup | Menggantikan SELURUH ~/.kiro | Hanya menambah steering, hooks, agents |
+| Sessions | Disimpan di situ | Tetap di ~/.kiro/sessions/ |
+| Settings | Disimpan di situ | Tetap di ~/.kiro/settings/ |
+| Global steering | Di-override penuh | Tetap berlaku + ditambah workspace steering |
+| Use case | Isolasi total per-project | Menambah konteks tanpa mengganti global |
+
+### Tips Penggunaan
+
+Anda bisa buat shell alias atau script untuk memudahkan:
+
+    # Di .bashrc atau .zshrc
+    alias kiro-project='export KIRO_HOME="$(pwd)/.kiro_env" && kiro-cli'
+
+    # Lalu tinggal panggil:
+    kiro-project chat --agent core-portfolio
+
+Atau buat file start.sh di root project:
+
+    #!/bin/bash
+    export KIRO_HOME="$(pwd)/.kiro_env"
+    kiro-cli chat --agent core-portfolio
+
+### Catatan Penting
+
+- Tambahkan .kiro_env/sessions/ dan .kiro_env/settings/ ke .gitignore jika Anda commit folder ini
+- Hanya .kiro_env/agents/ yang biasanya perlu di-share ke tim
+- Contoh .gitignore entry:
+
+      .kiro_env/sessions/
+      .kiro_env/settings/
+      .kiro_env/.cli_bash_history
+
+### Referensi
+
+- https://kiro.dev/docs/cli/chat/configuration
+- https://kiro.dev/changelog/cli/ (KIRO_HOME announcement)
